@@ -28,6 +28,7 @@ copying the text.
 | `POINTER.md` | The short block that `bootstrap.py` writes into a project. |
 | `bootstrap.py` | Adds or refreshes that block in a project's `AGENTS.md`. Idempotent. |
 | `install_global.py` | Installs the playbook into every agent's global instruction file on this machine, and the handoff kit into `~/.agent-handoff/`. |
+| `~/.agent-handoff/install_global.py` | Self-contained copy written by the installer, for refreshing offline. |
 | `handoff/` | The runtime behind `handoff.py adopt` / `save` / `resume`. |
 | `SETUP.md` | First-time setup, per project and per machine, plus troubleshooting. |
 
