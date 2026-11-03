@@ -1,0 +1,21 @@
+#!/bin/sh
+# Universal handoff wake-up. Works with any agent or editor and never blocks git.
+[ -n "$HANDOFF_INTERNAL" ] && exit 0
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+script="$root/scripts/handoff_watch.py"
+[ -f "$script" ] || exit 0
+if command -v python >/dev/null 2>&1; then
+  py=$(command -v python)
+elif command -v py >/dev/null 2>&1; then
+  py=$(command -v py)
+else
+  exit 0
+fi
+case "$py" in
+  *.exe)
+    gui="${py%.exe}w.exe"
+    [ -x "$gui" ] && py="$gui"
+    ;;
+esac
+"$py" "$script" --ensure --repo "$root" >/dev/null 2>&1 &
+exit 0
