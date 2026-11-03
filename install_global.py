@@ -85,6 +85,13 @@ def build_kit(home):
         except OSError:
             pass
     (kit / "INSTRUCTIONS.md").write_text(AGENTS + "\n", encoding="utf-8", newline="\n")
+    (kit / "AGENTS.md").write_text(AGENTS + "\n", encoding="utf-8", newline="\n")
+    (kit / "POINTER.md").write_text(POINTER + "\n", encoding="utf-8", newline="\n")
+    # Keep the installers in the kit so the machine can refresh itself without a
+    # clone, and so a repository with an older installer can forward to this copy.
+    for name in ("bootstrap.py", "install_global.py"):
+        shutil.copy2(HERE / name, kit / name)
+        copied.append(name)
     (kit / "GLOBAL-SETUP.md").write_text(manual_steps(home), encoding="utf-8", newline="\n")
     return kit, copied
 
