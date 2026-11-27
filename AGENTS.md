@@ -78,6 +78,18 @@ If the kit is missing on a machine, install it from this repository with
 - Do not leave debug output, commented-out code or generated bulk files.
 - Update documentation when behaviour or setup changes.
 
+## Before building (spec-sized changes)
+
+- A change too large for one paragraph/session: its written statement (Spec)
+  needs a pre-implementation plan-attack pass; resolve all findings before coding.
+- One context holder keeps the statement; 3-4 fresh-context reviewer sub-agents
+  (or independent human reviewers) each attack exactly ONE invariant drawn from
+  the project's ADRs, glossary rules and test expectations. No reviewer grades its own plan.
+- Anything mechanically catchable becomes a test, lint rule or CI check (a
+  Retro-style deterministic check), not prose. This is a planning step, not
+  permission to write code before the owner agrees.
+- Full reference: https://raw.githubusercontent.com/prnvrai/agent-playbook/main/references/plan-attack.md
+
 ## When blocked
 
 - Try the obvious fix once, then report the exact error, what you tried, and the

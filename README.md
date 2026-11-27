@@ -25,6 +25,7 @@ copying the text.
 | File | Purpose |
 |---|---|
 | `AGENTS.md` | The canonical playbook: session start, safety rules, how to work, how to finish. |
+| `references/plan-attack.md` | Full tool-agnostic reference for the pre-implementation plan-attack pass. |
 | `POINTER.md` | The short block that `bootstrap.py` writes into a project. |
 | `bootstrap.py` | Adds or refreshes that block in a project's `AGENTS.md`. Idempotent. |
 | `install_global.py` | Installs the playbook into every agent's global instruction file on this machine, and the handoff kit into `~/.agent-handoff/`. |
