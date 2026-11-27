@@ -91,3 +91,38 @@ If the kit is missing on a machine, install it from this repository with
 3. Update `HANDOFF.md` only through the handoff commands; the merge workflow
    clears the Open work block.
 4. Report what changed, what was verified, and what remains.
+
+## AI coding workflow (tool-agnostic)
+
+- Before any non-trivial change: read handoff and git state, explore with a
+  cheap read-only pass, then ask the owner concrete questions in one batch.
+  Never fill a gap with a guess.
+- Keep the agent set small and tune each agent or instruction file separately;
+  resume a session for related work, start fresh for a new ticket. On a drifting
+  or polluted thread, restart with a 3-5 line brief and exact file paths.
+  Subtraction beats patching; one ticket per session.
+- Scope large work into a written spec and small tickets. Effort is a budget:
+  default low/medium, high only for verification, debugging and hard research.
+- Determinism beats prompting: encode repeated mistakes as a lint rule, test,
+  CI check, ADR or glossary term, not another paragraph of prose.
+- Keep skills and instructions on-demand, short, with a name and description;
+  keep deep material in references or scripts and verify with a repeatable
+  check, not a happy-path demo. Avoid huge third-party bundles or unpinned
+  downloads.
+- Folder-local AGENTS.md compose with root rules; put folder-specific
+  constraints there, not in the root.
+- Never create overlapping end-to-end tests; drop smaller cases already covered
+  by a larger flow.
+- Verify with evidence: run the documented checks, quote exact output, and
+  separate verified from unverified.
+- Use the cheapest sufficient model for read-only exploration, a stronger one
+  for implementation and verification. Never change provider, billing or quota
+  settings, enable credit fallback, or put keys or tokens in files or chat
+  without explicit owner approval.
+- Merge danger gate: a two-way door with small blast radius can be merged and
+  sampled; a one-way door (money, orders, credentials, deleted data, public
+  exposure, pushed history) needs explicit approval every time.
+- Retro every review: each human review comment becomes a deterministic check
+  or is explicitly accepted as a one-off.
+- Finish by pushing a resumable handoff; unpushed work does not survive a dead
+  session.
