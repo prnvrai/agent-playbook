@@ -123,6 +123,64 @@ python "%USERPROFILE%\.agent-handoff\handoff_watch.py" --stop --repo "C:\path\to
 
 A `git switch` or any commit restarts it through the hooks.
 
+## Quota watchdog (opt-in, owner approval required)
+
+The optional quota watchdog checkpoints work before credits run out and resumes
+it after the reset. Create `~/.agent-handoff/config.json` to choose behaviour;
+it holds no secrets and is never written by the detector:
+
+```json
+{
+  "cross_agent_resume": false,
+  "opencode_agent": "strategic"
+}
+```
+
+`cross_agent_resume` defaults to `false`. When false, Codex resumes its own
+session with `codex exec resume <session-id> <brief>`. When true, Codex
+exhaustion starts a new OpenCode session (bundled
+`opencode-cli.exe`, fallback `opencode` on PATH) and OpenCode exhaustion starts
+a fresh `codex exec <brief>`. The optional `opencode_agent` defaults to
+`strategic` and is passed as `--agent`; no `--auto`/`--full-auto`/`-y` is used,
+because the owner chose normal agent authority. Checkpoints pass `--no-push`.
+No tool ever reuses the other tool's session id, and `~/.codex/config.toml` is
+never edited. Distinct log rows for one session are distinct events; there is no
+per-session cooldown in this version.
+
+Manual commands:
+
+```powershell
+python "%USERPROFILE%\.agent-handoff\handoff_quota.py" --status
+python "%USERPROFILE%\.agent-handoff\handoff_quota.py" --resume-now --repo "C:\path\to\project"
+python "%USERPROFILE%\.agent-handoff\handoff_quota.py" --handoff --repo "C:\path\to\project"
+python "%USERPROFILE%\.agent-handoff\handoff_quota.py" --poll --force-retry
+python "%USERPROFILE%\.agent-handoff\handoff_install.py" --status
+python "%USERPROFILE%\.agent-handoff\handoff_install.py" --install-quota
+```
+
+`--resume-now` checks the local clock against the parsed Codex reset and spends
+nothing before it has passed. OpenCode exhaustion rows have no reset time, so
+they stay pending and are resumed only by this manual trigger; with the setting
+off the command reports that manual handoff needs `cross_agent_resume` enabled.
+`--handoff` starts the other agent for a repo immediately (source from
+`--source` or the newest detected event). Events without a resolvable repo are
+`error`/`needs-repo` and are never launched. A timeout marks an event `unknown`;
+only `--force-retry` can relaunch it. Plain `--install-quota` prints the Task
+Scheduler plan (`agent-handoff-quota-<id>`, every 5 minutes, `pythonw ...
+handoff_quota.py --poll`), the cron note and the chat command without applying
+them; only `--apply` registers the task. `--uninstall-quota --dry-run` shows the
+inverse. The applied install writes a reversible
+`~/.config/opencode/commands/resume-codex.md` that asks the agent to run
+`--resume-now` and report the real output.
+
+**Safety:** enabling the scheduled task, the OpenCode automation cron or the
+chat command can lead to unattended credit spending. That is a one-way door:
+get explicit owner approval before adding `--apply` to `--install-quota` or
+before setting `cross_agent_resume: true`. The installer calls no live automation
+API; the cron schedule (`*/5 * * * *`, notify-only) and intent are documented in
+`~/.agent-handoff/quota-cron-note.md` for manual registration. `--status` reports
+the scheduler task, cron note and chat-command presence.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -134,6 +192,10 @@ A `git switch` or any commit restarts it through the hooks.
 | A commit is blocked in another repository | A project-specific `pre-commit` hook is in the hooks directory, not the playbook. The playbook installs only the four wake hooks. |
 | The raw URL does not resolve | The repository may have been made private, or the file was renamed. Use `~/.agent-handoff/INSTRUCTIONS.md`, which holds the same text. |
 | Credits or context are nearly gone | Run `save` immediately, then `resume` in the next session. Do not keep working without a checkpoint. |
+| `--resume-now` prints "not reset yet" | The local clock is before the parsed reset. No credits were spent; rerun later. |
+| "manual handoff needs cross_agent_resume enabled" | Cross-agent handoff is opt-in. Ask the owner before editing `~/.agent-handoff/config.json`. |
+| Event status `needs-repo` | The session/cwd could not be resolved. Rerun with `--repo "C:\path"`. |
+| Event status `unknown` | A launch timed out and its outcome is unknown. Ask the owner, then use `--force-retry`. |
 
 ## What this repository does not do
 
