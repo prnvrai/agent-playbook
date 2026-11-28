@@ -26,7 +26,138 @@ HERE = Path(__file__).resolve()
 REPO = HERE.parents[1]
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 WATCH = HERE.with_name("handoff_watch.py")
+QUOTA = HERE.with_name("handoff_quota.py")
 WAKE_HOOKS = ("post-commit", "post-checkout", "post-merge", "pre-push")
+
+# --- Ticket 03: quota watchdog install (opt-in, one-way door) ----------------
+QUOTA_TASK_PREFIX = "agent-handoff-quota-"
+CHAT_COMMAND = Path.home() / ".config" / "opencode" / "commands" / "resume-codex.md"
+CRON_NOTE = Path.home() / ".agent-handoff" / "quota-cron-note.md"
+
+# The OpenCode automation is *documented*, never registered by this installer.
+# No automation API is called anywhere in this file.
+QUOTA_CRON = {
+    "name": "agent-handoff-quota",
+    "schedule": "*/5 * * * *",
+    "every_minutes": 5,
+    "intent": "Poll quota state every 5 minutes and notify; no agent launch, "
+              "no credit spend and no automation registration without owner approval.",
+    "registration": "manual, by the owner, through the OpenCode automation UI",
+}
+CHAT_COMMAND_TEXT = """---
+description: Check quota state and resume a handoff when the reset has passed
+---
+Run `python "%USERPROFILE%\\.agent-handoff\\handoff_quota.py" --resume-now` yourself
+(macOS/Linux: `python ~/.agent-handoff/handoff_quota.py --resume-now`) and report the
+real command output verbatim. Do not guess the output, do not spend credits on a
+probe, do not edit agent config, and do not enable unattended spend or automation
+without explicit owner approval.
+"""
+CRON_NOTE_TEXT = """# Quota watchdog cron (planned, not registered)
+
+- Automation name: agent-handoff-quota
+- Schedule: */5 * * * * (every 5 minutes)
+- Intent: poll quota state and notify. No agent launch, no credit spend, no
+  billing change and no API-driven registration without explicit owner approval.
+- The installer never calls an automation API. Registration and cancellation are
+  manual, through the OpenCode automation UI.
+- Windows counterpart: Task Scheduler task agent-handoff-quota-<repo-id>,
+  every 5 minutes, running `pythonw ... handoff_quota.py --poll`.
+
+"""
+
+
+def quota_task_name(repo):
+    return QUOTA_TASK_PREFIX + task_id(repo)
+
+
+def quota_task_command(repo):
+    return '"' + str(pythonw()) + '" "' + str(QUOTA) + '" --poll'
+
+
+def quota_plan(repo):
+    return {
+        "scheduler": {
+            "task": quota_task_name(repo),
+            "schedule": {"type": "MINUTE", "modulo": 5},
+            "command": quota_task_command(repo),
+            "create": ["schtasks", "/Create", "/F", "/SC", "MINUTE", "/MO", "5",
+                       "/TN", quota_task_name(repo), "/TR", quota_task_command(repo)],
+        },
+        "cron": dict(QUOTA_CRON),
+        "cron_note": str(CRON_NOTE),
+        "chat_command": {"path": str(CHAT_COMMAND), "text": CHAT_COMMAND_TEXT},
+    }
+
+
+def has_quota_task(repo):
+    result = run("schtasks", "/Query", "/TN", quota_task_name(repo), timeout=30)
+    return result.returncode == 0
+
+
+def write_quota_files():
+    """Write only our own note/chat command, and only when content differs."""
+    written = []
+    for path, text in ((CRON_NOTE, CRON_NOTE_TEXT), (CHAT_COMMAND, CHAT_COMMAND_TEXT)):
+        if path.is_file() and path.read_text(encoding="utf-8", errors="replace") == text:
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+        written.append(str(path))
+    return written
+
+
+def install_quota(repo, dry_run=True, apply=False):
+    """Idempotent and dry-run by default; only --apply may call schtasks /Create."""
+    plan = quota_plan(repo)
+    if dry_run or not apply:
+        return {"dry_run": True, "applied": False, "plan": plan,
+                "note": "pass --apply with explicit owner approval to register"}
+    create = run("schtasks", "/Create", "/F", "/SC", "MINUTE", "/MO", "5",
+                 "/TN", quota_task_name(repo), "/TR", quota_task_command(repo), timeout=60)
+    if create.returncode != 0:
+        return {"dry_run": False, "applied": False, "task": quota_task_name(repo),
+                "error": (create.stderr or create.stdout).strip()[-300:]}
+    return {"dry_run": False, "applied": True, "task": quota_task_name(repo),
+            "every_minutes": 5, "files_written": write_quota_files(),
+            "cron": "documented only; owner registers manually"}
+
+
+def uninstall_quota(repo, dry_run=False):
+    """Remove the scheduler task and only our chat command file."""
+    if dry_run:
+        return {"dry_run": True, "applied": False,
+                "task": quota_task_name(repo), "delete": ["schtasks", "/Delete", "/F",
+                                                          "/TN", quota_task_name(repo)],
+                "chat_command_remove": str(CHAT_COMMAND)}
+    delete = run("schtasks", "/Delete", "/F", "/TN", quota_task_name(repo), timeout=30)
+    removed_file = False
+    kept_foreign = False
+    if CHAT_COMMAND.is_file():
+        try:
+            content = CHAT_COMMAND.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            content = ""
+        if content == CHAT_COMMAND_TEXT:
+            CHAT_COMMAND.unlink(missing_ok=True)
+            removed_file = True
+        else:
+            # Never delete a file we did not write at that path.
+            kept_foreign = True
+    return {"dry_run": False, "removed_task": delete.returncode == 0,
+            "chat_command_removed": removed_file, "chat_command_kept": kept_foreign,
+            "cron": "note kept as record; owner cancels the automation manually"}
+
+
+def quota_status(repo):
+    return {
+        "scheduler_task": has_quota_task(repo),
+        "task_name": quota_task_name(repo),
+        "cron_note": {"present": CRON_NOTE.is_file(), "path": str(CRON_NOTE),
+                      "schedule": QUOTA_CRON["schedule"],
+                      "registered_by_installer": False},
+        "chat_command": {"present": CHAT_COMMAND.is_file(), "path": str(CHAT_COMMAND)},
+    }
 
 
 def task_id(repo):
@@ -206,7 +337,7 @@ def status(repo):
     hooks_ok = all((hooks / name).exists() for name in WAKE_HOOKS)
     return {"hooks_path": hooks_path(repo) or None, "hooks_dir": str(hooks),
             "hooks_ready": hooks_ok, "watcher": watcher,
-            "autostart": has_autostart(repo)}
+            "autostart": has_autostart(repo), "quota": quota_status(repo)}
 
 
 def has_autostart(repo):
@@ -223,14 +354,30 @@ def has_autostart(repo):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=str(REPO))
-    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--check", "--status", dest="check", action="store_true",
+                        help="print status (including quota install) as JSON")
     parser.add_argument("--uninstall", action="store_true")
+    parser.add_argument("--install-quota", action="store_true",
+                        help="plan the opt-in quota watchdog (dry-run by default)")
+    parser.add_argument("--apply", action="store_true",
+                        help="required with --install-quota to actually register")
+    parser.add_argument("--uninstall-quota", action="store_true",
+                        help="remove the quota scheduler task and chat command")
     parser.add_argument("--no-autostart", action="store_true")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="report the quota plan without registering anything")
     args = parser.parse_args(argv)
     repo = str(Path(args.repo).resolve())
 
     if args.check:
         print(json.dumps(status(repo), indent=2))
+        return 0
+    if args.install_quota:
+        register = bool(args.apply) and not args.dry_run
+        print(json.dumps(install_quota(repo, dry_run=not register, apply=register), indent=2))
+        return 0
+    if args.uninstall_quota:
+        print(json.dumps(uninstall_quota(repo, dry_run=args.dry_run), indent=2))
         return 0
     if args.uninstall:
         stopped = run(sys.executable, str(WATCH), "--stop", "--repo", repo, timeout=30)
